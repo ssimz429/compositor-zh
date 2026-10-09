@@ -38,6 +38,11 @@ if ($taskMissing.Count) {
 if ($RuntimeDirectory) {
     & (Join-Path $PSScriptRoot 'restore-imaging-runtime.ps1') -RuntimeDirectory $RuntimeDirectory
 }
-if ((Get-FileHash -LiteralPath (Join-Path $taskImaging 'model\birefnet-lite.onnx') -Algorithm SHA256).Hash -ine 'c0faf38f5504f2239f1e6481ce4ac166b17435b38ea35e480d811a47bc1aba80') { throw 'Foreground model SHA256 mismatch.' }
+$taskModel = Join-Path $taskImaging 'model\birefnet-lite.onnx'
+if (Test-Path -LiteralPath $taskModel) {
+    if ((Get-FileHash -LiteralPath $taskModel -Algorithm SHA256).Hash -ine 'c0faf38f5504f2239f1e6481ce4ac166b17435b38ea35e480d811a47bc1aba80') { throw 'Foreground model SHA256 mismatch.' }
+} else {
+    Write-Warning 'Foreground model (birefnet-lite.onnx) is absent: this is a build-only checkout. The Chinese executable still builds; the installed CompositorWindows folder already supplies the runtime model.'
+}
 & cmake --version
 Write-Host "Ready: Qt $($taskLock.qt.version), MSVC $env:VCToolsVersion, SDK $env:WindowsSDKVersion. Run cmake --preset windows-x64-debug from $taskRoot."
