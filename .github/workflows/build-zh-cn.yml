@@ -19,16 +19,38 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Bootstrap dependencies (Qt 6.8.3 + codecs + ONNX Runtime + model)
+      - name: Bootstrap dependencies (Qt 6.8.3 + codecs + ONNX Runtime)
         shell: pwsh
         run: |
           ./scripts/bootstrap.ps1 -Python "${{ steps.py.outputs.python-path }}"
+
+      - name: Restore locked runtime binaries
+        shell: pwsh
+        run: |
+          # The locked hashes describe the shipped prebuilt binaries, so place the
+          # exact shipped DLLs over the source-built ones before CMake configures.
+          $map = @{
+            'build-support/runtime/heif.dll'                       = 'dependencies/imaging/install/bin/heif.dll'
+            'build-support/runtime/libde265.dll'                   = 'dependencies/imaging/install/bin/libde265.dll'
+            'build-support/runtime/onnxruntime.dll'                = 'dependencies/imaging/onnxruntime-win-x64-1.30.0/lib/onnxruntime.dll'
+            'build-support/runtime/onnxruntime_providers_shared.dll' = 'dependencies/imaging/onnxruntime-win-x64-1.30.0/lib/onnxruntime_providers_shared.dll'
+          }
+          foreach ($src in $map.Keys) {
+            $dst = $map[$src]
+            New-Item -ItemType Directory -Force (Split-Path $dst -Parent) | Out-Null
+            Copy-Item -LiteralPath $src -Destination $dst -Force
+            $h = (Get-FileHash -LiteralPath $dst -Algorithm SHA256).Hash
+            Write-Host ("restored {0}  sha256={1}" -f $dst, $h)
+          }
 
       - name: Configure CMake (Release)
         shell: pwsh
         run: |
           $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\Include'
-          $sdk = (Get-ChildItem $sdkRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1).Name
+          $sdk = (Get-ChildItem $sdkRoot -Directory |
+                  Where-Object { $_.Name -match '^10\.\d+\.\d+\.\d+$' } |
+                  Sort-Object { [version]$_.Name } -Descending |
+                  Select-Object -First 1).Name
           Write-Host "Using Windows SDK $sdk"
           cmake --preset windows-x64-release `
             -DCMAKE_SYSTEM_VERSION=$sdk `
