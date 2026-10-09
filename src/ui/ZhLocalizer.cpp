@@ -428,37 +428,39 @@ class Localizer final : public QObject {
 public:
     explicit Localizer(QObject* parent) : QObject(parent) {
         if (qApp) qApp->installEventFilter(this);
-        timer_.setInterval(300);
+        // Periodic sweep only. It runs on the event loop, when every object is
+        // fully constructed, so it can never touch a half-built widget.
+        timer_.setInterval(200);
         connect(&timer_, &QTimer::timeout, this, [this] { sweep(); });
         timer_.start();
-        sweep();
     }
 
 protected:
+    // Only QEvent::Show is observed: a widget is fully constructed by the time it
+    // is shown, so reading/writing it here is safe. Polish / ChildAdded /
+    // LayoutRequest are deliberately ignored - they fire while objects are still
+    // being constructed, and touching them then crashes Qt.
     bool eventFilter(QObject* watched, QEvent* event) override {
-        switch (event->type()) {
-        case QEvent::Show:
-        case QEvent::Polish:
-        case QEvent::ChildAdded:
-        case QEvent::LayoutRequest:
-        case QEvent::LanguageChange:
-        case QEvent::DynamicPropertyChange:
-            seen_.clear();
-            if (auto* widget = qobject_cast<QWidget*>(watched)) translateWidget(widget);
-            else if (auto* action = qobject_cast<QAction*>(watched)) translateAction(action);
-            break;
-        default:
-            break;
+        if (event->type() == QEvent::Show && !busy_) {
+            if (auto* widget = qobject_cast<QWidget*>(watched)) {
+                busy_ = true;
+                seen_.clear();
+                translateWidget(widget);
+                busy_ = false;
+            }
         }
         return false;
     }
 
 private:
     void sweep() {
+        if (busy_ || !qApp || QApplication::closingDown()) return;
+        busy_ = true;
         seen_.clear();
-        if (!qApp) return;
-        const auto tops = QApplication::topLevelWidgets();
-        for (QWidget* widget : tops) translateWidget(widget);
+        const QWidgetList tops = QApplication::topLevelWidgets();
+        for (QWidget* widget : tops)
+            if (widget) translateWidget(widget);
+        busy_ = false;
     }
 
     void translateAction(QAction* action) {
@@ -532,6 +534,7 @@ private:
 
     QTimer timer_;
     QSet<const QObject*> seen_;
+    bool busy_{false};
 };
 
 }  // namespace
