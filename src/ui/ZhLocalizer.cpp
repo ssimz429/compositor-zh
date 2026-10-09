@@ -371,6 +371,24 @@ const char* const kPairs[][2] = {
     {" %", " %"},
     {" degrees", " 度"},
     {" percent", " 百分比"},
+
+    // ---- Standard dialog buttons / eyedropper targets ----
+    {"OK", "确定"},
+    {"Cancel", "取消"},
+    {"Apply", "应用"},
+    {"Yes", "是"},
+    {"No", "否"},
+    {"Close", "关闭"},
+    {"Save", "保存"},
+    {"Discard", "放弃"},
+    {"Reset", "重置"},
+    {"Restore Defaults", "恢复默认值"},
+    {"Retry", "重试"},
+    {"Ignore", "忽略"},
+    {"Abort", "中止"},
+    {"Black", "黑场"},
+    {"Gray", "灰场"},
+    {"White", "白场"},
 };
 
 const QHash<QString, QString>& dictionary() {
