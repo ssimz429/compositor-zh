@@ -1,0 +1,90 @@
+name: Build Compositor Windows (Simplified Chinese)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        id: py
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Bootstrap dependencies (Qt 6.8.3 + codecs + ONNX Runtime + model)
+        shell: pwsh
+        run: |
+          ./scripts/bootstrap.ps1 -Python "${{ steps.py.outputs.python-path }}"
+
+      - name: Configure CMake (Release)
+        shell: pwsh
+        run: |
+          $sdkRoot = 'C:\Program Files (x86)\Windows Kits\10\Include'
+          $sdk = (Get-ChildItem $sdkRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1).Name
+          Write-Host "Using Windows SDK $sdk"
+          cmake --preset windows-x64-release `
+            -DCMAKE_SYSTEM_VERSION=$sdk `
+            -DPython3_EXECUTABLE="${{ steps.py.outputs.python-path }}"
+
+      - name: Build the Compositor executable
+        shell: pwsh
+        run: |
+          cmake --build --preset windows-x64-release --target Compositor --parallel 4
+
+      - name: Stage runnable output
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter Compositor.exe -ErrorAction Stop |
+                 Where-Object { $_.FullName -notmatch '\\debug\\' } |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          Write-Host "Built executable: $($exe.FullName)"
+          $stage = Join-Path $env:GITHUB_WORKSPACE 'stage'
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item $exe.FullName $stage
+
+          $windeploy = Join-Path $env:GITHUB_WORKSPACE 'dependencies\qt\bin\windeployqt.exe'
+          if (Test-Path $windeploy) {
+            & $windeploy --release (Join-Path $stage 'Compositor.exe')
+          } else {
+            Write-Warning 'windeployqt.exe not found; artifact will contain the exe only.'
+          }
+
+          $img = Join-Path $env:GITHUB_WORKSPACE 'dependencies\imaging'
+          foreach ($dll in @(
+            'onnxruntime-win-x64-1.30.0\lib\onnxruntime.dll',
+            'onnxruntime-win-x64-1.30.0\lib\onnxruntime_providers_shared.dll',
+            'install\bin\heif.dll',
+            'install\bin\libde265.dll')) {
+            $src = Join-Path $img $dll
+            if (Test-Path $src) { Copy-Item $src $stage } else { Write-Warning "Missing runtime: $dll" }
+          }
+
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath (Join-Path $env:GITHUB_WORKSPACE 'Compositor-zh-CN-windows-x64.zip') -Force
+
+      - name: Upload Chinese build (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Compositor-zh-CN-windows-x64
+          path: |
+            stage/
+            Compositor-zh-CN-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Publish Chinese build as a Release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "zh-build-${{ github.run_number }}"
+          gh release create $tag "Compositor-zh-CN-windows-x64.zip" `
+            --title "Compositor 简体中文版 ($tag)" `
+            --notes "Automated Simplified Chinese build of Compositor Windows. Replace your Compositor.exe with the one in this zip." `
+            --target "${{ github.sha }}"

@@ -1,0 +1,23 @@
+# Build output
+/build/
+/evidence/
+
+# Dependencies fetched by scripts/bootstrap.ps1 on the CI runner (never commit)
+/dependencies/downloads/
+/dependencies/qt/
+/dependencies/imaging/install/
+/dependencies/imaging/model/
+/dependencies/imaging/model-venv/
+/dependencies/imaging/onnxruntime-win-x64-1.30.0/
+/dependencies/imaging/*.zip
+/dependencies/imaging/*.tar
+/dependencies/imaging/*-source.tar
+
+# Local artifacts
+/Compositor-zh-CN-windows-x64.zip
+/stage/
+
+# Editor/OS cruft
+.vs/
+*.user
+Thumbs.db
