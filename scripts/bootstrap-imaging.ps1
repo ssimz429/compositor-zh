@@ -46,15 +46,21 @@ Configure-Build 'libde265' @('-DENABLE_DECODER=OFF','-DENABLE_ENCODER=OFF','-DEN
 Configure-Build 'libheif' @('-DENABLE_PLUGIN_LOADING=OFF','-DWITH_LIBDE265=ON','-DWITH_LIBDE265_PLUGIN=OFF','-DWITH_X265=OFF','-DWITH_X264=OFF','-DWITH_OpenH264_DECODER=OFF','-DWITH_AOM_DECODER=OFF','-DWITH_AOM_ENCODER=OFF','-DWITH_LIBSHARPYUV=OFF','-DWITH_GDK_PIXBUF=OFF','-DWITH_EXAMPLES=OFF','-DBUILD_TESTING=OFF','-DBUILD_DOCUMENTATION=OFF')
 if(-not $SkipModel){
     Expand-Archive (Join-Path $dependency 'onnxruntime-win-x64-1.30.0.zip') -DestinationPath $dependency -Force
-    $venv=Join-Path $dependency 'model-venv'
-    if(-not (Test-Path (Join-Path $venv 'Scripts/python.exe'))){& $Python -m venv $venv;if($LASTEXITCODE){throw 'Python 3.12 environment creation failed'}}
-    $pythonExe=Join-Path $venv 'Scripts/python.exe'
-    & $pythonExe -m pip install --extra-index-url https://download.pytorch.org/whl/cpu --require-hashes -r (Join-Path $dependency 'model-requirements.hashes.txt')
-    if($LASTEXITCODE){throw 'Pinned conversion dependency installation failed'}
-    & $pythonExe (Join-Path $root 'tests/imaging/make_fixtures.py');if($LASTEXITCODE){throw 'Fixture creation failed'}
-    $model=Join-Path $dependency 'model/birefnet-lite.onnx'
-    if(-not (Test-Path $model)){& $pythonExe (Join-Path $root 'tests/imaging/convert_birefnet.py');if($LASTEXITCODE){throw 'Model conversion/verification failed'}}
-    Assert-Hash $model $lock.model.onnx_sha256
+    $fixtures=Join-Path $root 'tests/imaging/make_fixtures.py'
+    $converter=Join-Path $root 'tests/imaging/convert_birefnet.py'
+    if((Test-Path -LiteralPath $fixtures) -and (Test-Path -LiteralPath $converter)){
+        $venv=Join-Path $dependency 'model-venv'
+        if(-not (Test-Path (Join-Path $venv 'Scripts/python.exe'))){& $Python -m venv $venv;if($LASTEXITCODE){throw 'Python 3.12 environment creation failed'}}
+        $pythonExe=Join-Path $venv 'Scripts/python.exe'
+        & $pythonExe -m pip install --extra-index-url https://download.pytorch.org/whl/cpu --require-hashes -r (Join-Path $dependency 'model-requirements.hashes.txt')
+        if($LASTEXITCODE){throw 'Pinned conversion dependency installation failed'}
+        & $pythonExe $fixtures;if($LASTEXITCODE){throw 'Fixture creation failed'}
+        $model=Join-Path $dependency 'model/birefnet-lite.onnx'
+        if(-not (Test-Path $model)){& $pythonExe $converter;if($LASTEXITCODE){throw 'Model conversion/verification failed'}}
+        Assert-Hash $model $lock.model.onnx_sha256
+    } else {
+        Write-Output 'Skipping offline model conversion: converter tooling (tests/imaging/make_fixtures.py, convert_birefnet.py) is not bundled with this source package. ONNX Runtime has been expanded; the runtime foreground model is supplied by the installed portable build.'
+    }
 }
 Write-Output 'Pinned imaging dependencies are available locally.'
 
